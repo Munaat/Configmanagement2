@@ -1,0 +1,18 @@
+digraph G {
+    "commit/Profit !!!" -> "commit/Merge branch 'dev'
+
+# Conflicts:
+#	main.py"
+    "commit/Merge branch 'dev'
+
+# Conflicts:
+#	main.py" -> "commit/Thanking user for their data :)"
+    "commit/Thanking user for their data :)" -> "commit/Added greetings to user ;3"
+    "commit/Added greetings to user ;3" -> "commit/Made a hello world script <3"
+    "commit/Merge branch 'dev'
+
+# Conflicts:
+#	main.py" -> "commit/Taking money $$$"
+    "commit/Taking money $$$" -> "commit/Credentials for monetization B)"
+    "commit/Credentials for monetization B)" -> "commit/Added greetings to user ;3"
+}

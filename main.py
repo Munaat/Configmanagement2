@@ -1,4 +1,5 @@
 import os
+import re
 import zlib
 import argparse
 from datetime import datetime
@@ -193,11 +194,23 @@ def get_last_commit():
         return file.read().strip()
 
 
+def extract_unix_time(input_string):
+    # Регулярное выражение для поиска времени в строке
+    match = re.search(r'(\d{10})\s([+-]\d{4})', input_string)
+    if match:
+        unix_time = int(match.group(1))  # Извлекаем unix time
+        # Преобразуем unix time в datetime
+        dt = datetime.fromtimestamp(unix_time)
+        return dt
+    else:
+        return None
+
+
 def generate_dot(filename, cutoff_date):
     def recursive_write(file, tree, written_edges):
         label = tree['label']
         for child in tree['children']:
-            if child['label'].startswith('commit'):
+            if child['label'].startswith('commit') and extract_unix_time(child['date']) < cutoff_date:
                 edge = f'    "{label}" -> "{child["label"]}"\n'
                 if edge not in written_edges:
                     file.write(edge)
