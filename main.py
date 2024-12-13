@@ -1,6 +1,7 @@
 import os
-import json
 import zlib
+import argparse
+from datetime import datetime
 
 
 def parse_object(object_hash, description=None):
@@ -32,10 +33,14 @@ def parse_object(object_hash, description=None):
         # }
         object_dict = {}
 
+
         # В зависимости от типа объекта используем разные функции для его разбора
         if object_type == 'commit':
-            object_dict['label'] = r'[commit]\n' + object_hash[:6]
+            object_dict['label'] = 'commit/' + get_msg(raw_object_body)
             object_dict['children'] = parse_commit(raw_object_body)
+            object_dict['hash'] = object_hash[:6]
+            object_dict['message'] = get_msg(raw_object_body)
+            object_dict['date'] = get_date(raw_object_body)
 
         elif object_type == 'tree':
             object_dict['label'] = r'[tree]\n' + object_hash[:6]
@@ -46,9 +51,8 @@ def parse_object(object_hash, description=None):
             object_dict['children'] = []
 
         # Добавляем дополнительную информацию, если она была
-        if description is not None:
-            object_dict['label'] += r'\n' + description
-
+        #if description is not None:
+        #   object_dict['label'] += r'\n' + description
         return object_dict
 
 
@@ -81,22 +85,74 @@ def parse_tree(raw_content):
     return children
 
 
-def parse_commit(raw_content):
-    """
-    Парсим git-объект коммита, который состоит из следующих строк:
-    ┌────────────────────────────────────────────────────────────────┐
-    │ tree {хэш объекта дерева в 16ричном представлении}\n           │
-    │ parent {хэш объекта коммита в 16ричном представлении}\n        │─╮
-    │ parent {хэш объекта коммита в 16ричном представлении}\n        │ │
-    │ ...                                                            │ ├─ родителей может быть 0 или несколько
-    │ parent {хэш объекта коммита в 16ричном представлении}\n        │─╯ 
-    │ author {имя} <{почта}> {дата в секундах} {временная зона}\n    │
-    │ committer {имя} <{почта}> {дата в секундах} {временная зона}\n │
-    │ \n                                                             │
-    │ {сообщение коммита}                                            │
-    └────────────────────────────────────────────────────────────────┘
-    """
 
+def get_msg(raw_content):
+
+    # Переводим raw_content в кодировку UTF-8 (до этого он был последовательностью байтов)
+    content = raw_content.decode()
+    # Делим контент на строки
+    content_lines = content.split('\n')
+
+    # Словарь с содержимым коммита
+    commit_data = {}
+
+    # Извлекаем хэш объекта дерева, привязанного к коммиту
+    commit_data['tree'] = content_lines[0].split()[1]
+    content_lines = content_lines[1:]
+
+    # Список родительских коммитов
+    commit_data['parents'] = []
+    # Парсим всех родителей, сколько бы их ни было
+    while content_lines[0].startswith('parent'):
+        commit_data['parents'].append(content_lines[0].split()[1])
+        content_lines = content_lines[1:]
+
+    # Извлекаем информацию об авторе и коммитере
+    while content_lines[0].strip():
+        key, *values = content_lines[0].split()
+        commit_data[key] = ' '.join(values)
+        content_lines = content_lines[1:]
+
+    # Извлекаем сообщение к комиту
+    commit_data['message'] = '\n'.join(content_lines[1:]).strip()
+
+    return commit_data['message']
+
+
+def get_date(raw_content):
+
+    # Переводим raw_content в кодировку UTF-8 (до этого он был последовательностью байтов)
+    content = raw_content.decode()
+    # Делим контент на строки
+    content_lines = content.split('\n')
+
+    # Словарь с содержимым коммита
+    commit_data = {}
+
+    # Извлекаем хэш объекта дерева, привязанного к коммиту
+    commit_data['tree'] = content_lines[0].split()[1]
+    content_lines = content_lines[1:]
+
+    # Список родительских коммитов
+    commit_data['parents'] = []
+    # Парсим всех родителей, сколько бы их ни было
+    while content_lines[0].startswith('parent'):
+        commit_data['parents'].append(content_lines[0].split()[1])
+        content_lines = content_lines[1:]
+
+    # Извлекаем информацию об авторе и коммитере
+    while content_lines[0].strip():
+        key, *values = content_lines[0].split()
+        commit_data[key] = ' '.join(values)
+        content_lines = content_lines[1:]
+
+    # Извлекаем сообщение к комиту
+    commit_data['message'] = '\n'.join(content_lines[1:]).strip()
+
+    return commit_data['committer']
+
+
+def parse_commit(raw_content):
     # Переводим raw_content в кодировку UTF-8 (до этого он был последовательностью байтов)
     content = raw_content.decode()
     # Делим контент на строки
@@ -137,31 +193,48 @@ def get_last_commit():
         return file.read().strip()
 
 
-def generate_dot(filename):
-    """Создать DOT-файл для графа зависимостей"""
-
-    def recursive_write(file, tree):
-        """Рекурсивно перебрать все узлы дерева для построения связей графа"""
+def generate_dot(filename, cutoff_date):
+    def recursive_write(file, tree, written_edges):
         label = tree['label']
         for child in tree['children']:
-            # TODO: учитывать только уникальные связи, чтобы они не повторялись
-            file.write(f'    "{label}" -> "{child["label"]}"\n')
-            recursive_write(file, child)
+            if child['label'].startswith('commit'):
+                edge = f'    "{label}" -> "{child["label"]}"\n'
+                if edge not in written_edges:
+                    file.write(edge)
+                    written_edges.add(edge)
+            recursive_write(file, child, written_edges)
 
-    # Стартовая точка репозитория - последний коммит главной ветки
     last_commit = get_last_commit()
-    # Строим дерево
     tree = parse_object(last_commit)
-    # Описываем граф в DOT-нотации
     with open(filename, 'w') as file:
         file.write('digraph G {\n')
-        recursive_write(file, tree)
+        written_edges = set()  # Множество для отслеживания записанных рёбер
+        recursive_write(file, tree, written_edges)
         file.write('}')
 
 
-# Достаем информацию из конфигурационного файла
-with open('config.json', 'r') as f:
-    config = json.load(f)
 
-# Генерируем файл с DOT-нотацией графа зависимостей
-generate_dot('graph.dot')
+def main():
+    parser = argparse.ArgumentParser(description='Генерация графа зависимостей для git-репозитория.')
+    parser.add_argument('repo_path', help='Путь к анализируемому репозиторию')
+    parser.add_argument('output_file', help='Путь к файлу-результату в виде кода')
+    parser.add_argument('cutoff_date', help='Дата коммитов в формате YYYY-MM-DD')
+
+    args = parser.parse_args()
+
+    # Загрузка конфигурации
+    global config
+    config = {
+        'repo_path': args.repo_path,
+        'branch': 'master'
+    }
+
+    # Преобразование строки даты в объект datetime
+    cutoff_date = datetime.strptime(args.cutoff_date, '%Y-%m-%d')
+
+    # Генерация графа
+    generate_dot(args.output_file, cutoff_date)
+
+if __name__ == '__main__':
+    main()
+# dot -Tpng graph.dot -o graph.png
