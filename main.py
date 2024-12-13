@@ -81,6 +81,8 @@ def extract_unix_time(input_string):
     else:
         return None
 
+import subprocess
+
 def generate_dot(filename, cutoff_date):
     def recursive_write(file, tree, written_edges):
         label = tree['label']
@@ -99,6 +101,12 @@ def generate_dot(filename, cutoff_date):
         written_edges = set()
         recursive_write(file, tree, written_edges)
         file.write('}')
+
+    # Создание PNG-файла из DOT-файла
+    png_filename = filename.replace('.dot', '.png')
+    subprocess.run(['dot', '-Tpng', filename, '-o', png_filename], check=True)
+    print(f'PNG файл создан: {png_filename}')
+
 
 def main():
     parser = argparse.ArgumentParser(description='Генерация графа зависимостей для git-репозитория.')
