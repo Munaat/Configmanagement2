@@ -194,6 +194,10 @@ python script.py /path/to/repo /path/to/output.dot 2023-01-01
    - Файл результата: `graph3.png`.
 
    ![Структура репозитория 3](images/truestruc1.png)
+   
+### Пример визуализации
+
+![Пример построенного программой графа](images/graph1.png)
 
 ### Тестовые сценарии
 
